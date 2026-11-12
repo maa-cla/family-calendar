@@ -773,16 +773,32 @@ $('#addCatBtn').addEventListener('click', () => {
   renderCatEditor();
 });
 
+/** URLの形をチェック。問題があれば説明を返す */
+function cleanUrl(u) { return String(u || '').replace(/\s+/g, ''); }
+function urlProblem(u) {
+  if (!u) return 'URLを入力してください';
+  if (/github\.io/.test(u)) return 'ここに入れるのはアプリのURL（github.io）ではなく、Apps Scriptの「ウェブアプリのURL」（https://script.google.com/macros/s/…/exec）です';
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) {
+    return 'URLの形が違うようです。「https://script.google.com/macros/s/」で始まり「/exec」で終わるURLを、途中が欠けないように貼り付けてください（いま入っている最後の部分：…' + u.slice(-12) + '）';
+  }
+  return '';
+}
+
 $('#testBtn').addEventListener('click', async () => {
   const f = sForm.elements;
   const r = $('#testResult');
-  if (!f.url.value.trim()) { r.className = 'hint ng'; r.textContent = 'URLを入力してください'; return; }
+  f.url.value = cleanUrl(f.url.value);
+  const bad = urlProblem(f.url.value);
+  if (bad) { r.className = 'hint ng'; r.textContent = '❌ ' + bad; return; }
   r.className = 'hint'; r.textContent = '確認中…';
   try {
-    await api('ping', {}, { url: f.url.value.trim(), token: f.token.value.trim() });
+    await api('ping', {}, { url: f.url.value, token: f.token.value.trim() });
     r.className = 'hint ok'; r.textContent = '✅ つながりました！ 「保存」を押してください';
   } catch (e) {
-    r.className = 'hint ng'; r.textContent = '❌ ' + e.message;
+    r.className = 'hint ng';
+    r.textContent = '❌ ' + e.message + (e instanceof NetError && navigator.onLine
+      ? '。ネットにはつながっているので、URLが1文字でも違う・デプロイのアクセスが「全員」でない・広告ブロックなどのアプリが通信を止めている、のどれかの可能性があります。URLをSafariで直接開いて「動いています ✅」と出るか確かめてください'
+      : '');
   }
 });
 
@@ -790,7 +806,8 @@ sForm.addEventListener('submit', async ev => {
   ev.preventDefault();
   readCatEditor();
   const f = sForm.elements;
-  const newCfg = { url: f.url.value.trim(), token: f.token.value.trim() };
+  const newCfg = { url: cleanUrl(f.url.value), token: f.token.value.trim() };
+  if (newCfg.url && urlProblem(newCfg.url)) { toast(urlProblem(newCfg.url)); return; }
   const newSettings = {
     husbandEmail: f.husbandEmail.value.trim(),
     defaultCategory: f.defaultCategory.value,
